@@ -14,7 +14,7 @@ namespace LibCN{
         std::vector<Layer<T>>layers;
         T step;
 
-        void train(const Matrix<T>&input,const Matrix<T>expected){
+        void train(const Matrix<T>&input,const Matrix<T>&expected){
             Matrix<T>last_output=input;
             Matrix<T>output;
             for(size_t i=0;i<layers.size();i++){
@@ -34,7 +34,7 @@ namespace LibCN{
             layers[index]=Layer<T>(i,o);
         }
 
-        void setLayFun(size_t index,const std::function<T(T)>&a,const std::function<T(T)>&a_d){
+        void setLayerFun(size_t index,const std::function<T(T)>&a,const std::function<T(T)>&a_d){
             layers[index].activation=a;
             layers[index].activation_d=a_d;
         }

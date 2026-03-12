@@ -56,6 +56,13 @@ namespace LibCN{
             this->mv=a.mv;
         }
 
+        Matrix<T>&operator=(const Matrix<T>&a){
+            this->h=a.h;
+            this->l=a.l;
+            this->mv=a.mv;
+            return*this;
+        }
+
         Matrix(std::initializer_list<std::initializer_list<T>>init){
             h=init.size();
             l=init.begin()->size();
