@@ -1,39 +1,42 @@
 # Lib Chest NeuralNetwork (LibCN)
 
-A lightweight header-only neural network library written in pure C++.
+A lightweight, header-only neural network library written in modern C++.
 
-LibCN is a small C++ library built for learning, experimentation, and writing simple neural network code without heavy dependencies. It focuses on clarity and directness rather than framework-scale abstraction.
+LibCN is a small C++ library built for learning, experimentation, and simple native projects. In **v3.0.0**, the library replaces the old `Matrix<T>` core container with a more general **`Tensor<T>`** type and renames the high-level network type from `Network` to **`MLP`**.
 
-This project is mainly intended for educational use, small experiments, and as a reference implementation.
-
----
-
-## Motivation
-
-Large machine learning frameworks such as PyTorch and TensorFlow are powerful and highly optimized.
-
-However, their C++ interfaces are often much heavier than what is needed for learning or small native projects.
-
-LibCN tries to offer a simpler alternative:
-
-- pure C++ implementation
-- minimal abstraction
-- easy to read and modify
-- natural to use inside normal C++ code
-
-This library is **not meant to replace industrial deep learning frameworks**. Its goal is to stay understandable.
+The project focuses on clarity, directness, and hackability rather than framework-scale abstraction.
 
 ---
 
-## Goals
+## Highlights of v3.0.0
+
+Compared with the previous version, **LibCN v3.0.0** mainly introduces:
+
+- `Tensor<T>` fully replaces `Matrix<T>` as the core data container
+- high-level network type renamed from `Network<T>` to `MLP<T>`
+- fully connected layers still use 2D tensors internally for weights, bias, input, and output
+- save/load interfaces added for layer parameters:
+  - `saveLayerWeights(...)`
+  - `saveLayerBias(...)`
+  - `loadLayerWeights(...)`
+  - `loadLayerBias(...)`
+- tensor-based initialization helpers added for matrix-style data construction
+
+Although the public container is now generalized, the current MLP implementation still expects **column-vector shaped 2D tensors** as layer inputs and outputs.
+
+---
+
+## Design Goals
 
 LibCN is designed to:
 
 - help understand how neural networks work internally
-- provide a simple matrix container for neural computation
+- stay small enough to read directly from source
 - avoid external dependencies
-- stay easy to integrate into existing C++ projects
-- remain small enough to read through directly
+- remain easy to integrate into normal C++ projects
+- provide a lightweight base for experimentation
+
+This project is **not intended to replace PyTorch, TensorFlow, or other industrial frameworks**.
 
 ---
 
@@ -43,65 +46,27 @@ LibCN is designed to:
 - Pure template implementation
 - Requires only the C++ standard library
 - No external dependencies
-- No build system required
-- Matrix operations
-- Fully connected layers
+- General-purpose `Tensor<T>` container
+- Fully connected neural network (`MLP`)
 - Multiple activation functions
 - Multiple loss functions
-- Optional specialized training path for Softmax output + Cross Entropy loss
+- Optional specialized path for `softmax + cross_entropy`
 - Optional loss printing during training
-
----
-
-## New in v2.0.0
-
-Compared with the previous version, LibCN v2.0.0 mainly introduces:
-
-- `Matrix<T>` internal storage changed from nested vectors to a single `std::vector<T>` with coordinate mapping
-- matrix element access changed to `matrix(i, j)`
-- removed `append`
-- removed `apply`
-- activation function interface changed from scalar-in/scalar-out to matrix-in/matrix-out
-- added `softmax`
-- added selectable loss functions
-- added `Network::setLoss(...)`
-- added `Network::train_p(...)`
-- added a specialized training path for **Softmax output layer + Cross Entropy loss**
-- added `Layer::backward_dz(...)`
-- added `Layer::sm` and `Network::ce`
-
----
-
-## Design Philosophy
-
-1. **Transparency over abstraction**  
-   Code should be readable and understandable.
-
-2. **Minimal dependencies**  
-   Only the C++ standard library is used.
-
-3. **Header-only simplicity**  
-   No extra linking steps are required.
-
-4. **C++ friendly interface**  
-   The library is designed to feel natural in ordinary C++ code.
+- Layer weight/bias export and import
 
 ---
 
 ## Requirements
 
-- C++20 or newer
-- Any modern C++ compiler
-
-Examples:
-
-- GCC
-- Clang
-- MSVC
+- **C++20** or newer
+- Any modern compiler such as:
+  - GCC
+  - Clang
+  - MSVC
 
 Example compilation:
 
-```cpp
+```bash
 g++ -std=c++20 example.cpp -o example
 ```
 
@@ -111,69 +76,81 @@ g++ -std=c++20 example.cpp -o example
 
 LibCN is header-only.
 
-Simply copy the library into your project and include:
+Copy the headers into your project and include:
 
 ```cpp
 #include "lib_chest_nn.hpp"
 ```
 
-No installation script or package manager is required.
+No build system, package manager, or separate linking step is required.
 
 ---
 
 ## Quick Example
 
-A minimal XOR example:
+A simple XOR example using the current v3.0.0 API:
 
 ```cpp
-
 #include "lib_chest_nn.hpp"
 #include <iostream>
 
 using namespace std;
 using namespace LibCN;
 
-int main()
-{
-    Network<float> net(2, 2, 1, 0.05f);
+int main(){
+    cout<<"this is an example for demostrating the train and use of xor using LibCN"<<endl;
+    MLP<float>net(2,2,1,0.05f);
 
-    net.setLoss(Losses::MSE<float>, Losses::MSE_d<float>);
+    net.setLoss(Losses::MSE<float>,Losses::MSE_d<float>);
 
-    net.setLayer(0, 2, 4);
-    net.setLayer(1, 4, 1);
+    net.setLayer(0,2,4);
+    net.setLayer(1,4,1);
 
-    net.init(-0.5f, 0.5f);
+    net.init(-0.5f,0.5f);
 
-    net.setLayerFun(0, Activations::tanh<float>, Activations::tanh_d<float>);
-    net.setLayerFun(1, Activations::sigmoid<float>, Activations::sigmoid_d<float>);
+    net.setLayerFun(0,Activations::tanh<float>,Activations::tanh_d<float>);
+    net.setLayerFun(1,Activations::sigmoid<float>,Activations::sigmoid_d<float>);
 
-    Matrix<float> x1{{0},{0}};
-    Matrix<float> x2{{0},{1}};
-    Matrix<float> x3{{1},{0}};
-    Matrix<float> x4{{1},{1}};
+    cout<<"MLP network initialized"<<endl;
 
-    Matrix<float> y1{{0}};
-    Matrix<float> y2{{1}};
-    Matrix<float> y3{{1}};
-    Matrix<float> y4{{0}};
+    Tensor<float>x1=Tensor<float>::matrix({
+        {0},
+        {0}
+    });
+    Tensor<float>x2=Tensor<float>::matrix({
+        {0},
+        {1}
+    });
+    Tensor<float>x3=Tensor<float>::matrix({
+        {1},
+        {0}
+    });
+    Tensor<float>x4=Tensor<float>::matrix({
+        {1},
+        {1}
+    });
 
-    cout << "before training" << endl;
-    cout << "0 xor 0 -> " << net.use(x1) << endl;
-    cout << "0 xor 1 -> " << net.use(x2) << endl;
-    cout << "1 xor 0 -> " << net.use(x3) << endl;
-    cout << "1 xor 1 -> " << net.use(x4) << endl;
+    Tensor<float>y1=Tensor<float>::matrix({{0}});
+    Tensor<float>y2=Tensor<float>::matrix({{1}});
+    Tensor<float>y3=Tensor<float>::matrix({{1}});
+    Tensor<float>y4=Tensor<float>::matrix({{0}});   
 
-    for(int i = 0; i < 50000; ++i)
-    {
-        if(i%2500==0)
-        {
-            net.train_p(x1, y1);
-            net.train_p(x2, y2);
-            net.train_p(x3, y3);
-            net.train_p(x4, y4);
+    cout<<"training data prepared"<<endl;
+
+    cout<<"before training"<<endl;
+    cout<<"0 xor 0 -> "<<net.use(x1)<<endl;
+    cout<<"0 xor 1 -> "<<net.use(x2)<<endl;
+    cout<<"1 xor 0 -> "<<net.use(x3)<<endl;
+    cout<<"1 xor 1 -> "<<net.use(x4)<<endl;
+
+    for(int i=0;i<50000;++i){
+        if(i%5000==0){
+            net.train_p(x1,y1);
+            net.train_p(x2,y2);
+            net.train_p(x3,y3);
+            net.train_p(x4,y4);
         }
-        else
-        {
+        else{
             net.train(x1, y1);
             net.train(x2, y2);
             net.train(x3, y3);
@@ -181,11 +158,43 @@ int main()
         }
     }
 
-    cout << "\nafter training" << endl;
-    cout << "0 xor 0 -> " << net.use(x1) << endl;
-    cout << "0 xor 1 -> " << net.use(x2) << endl;
-    cout << "1 xor 0 -> " << net.use(x3) << endl;
-    cout << "1 xor 1 -> " << net.use(x4) << endl;
+    cout<<"\nafter training"<<endl;
+    cout<<"0 xor 0 -> "<<net.use(x1)<<endl;
+    cout<<"0 xor 1 -> "<<net.use(x2)<<endl;
+    cout<<"1 xor 0 -> "<<net.use(x3)<<endl;
+    cout<<"1 xor 1 -> "<<net.use(x4)<<endl;
+
+    auto w0=net.saveLayerWeights(0);
+    auto b0=net.saveLayerBias(0);
+    auto w1=net.saveLayerWeights(1);
+    auto b1=net.saveLayerBias(1);
+
+    cout<<"theta saved"<<endl;
+
+    MLP<float>test_net(2,2,1,0);
+
+    test_net.setLayer(0,2,4);
+    test_net.setLayer(1,4,1);
+
+    test_net.setLayerFun(0,Activations::tanh<float>,Activations::tanh_d<float>);
+    test_net.setLayerFun(1,Activations::sigmoid<float>,Activations::sigmoid_d<float>);
+
+    cout<<"new MLP network created"<<endl;
+
+    test_net.loadLayerWeights(0,w0);
+    test_net.loadLayerBias(0,b0);
+    test_net.loadLayerWeights(1,w1);
+    test_net.loadLayerBias(1,b1);
+
+    cout<<"theta loaded"<<endl;
+
+    while(true){
+        cout<<"please input two booleans (1 or 0), or input other value to quit"<<endl;
+        Tensor<float>x(2,{2,1});
+        if(!(cin>>x(0,0)>>x(1,0)))break;
+        auto yt=test_net.use(x);
+        cout<<(yt(0,0)>0.5?"true" : "false")<<endl;
+    }
 
     return 0;
 }
@@ -194,53 +203,29 @@ int main()
 
 ---
 
-## Softmax + Cross Entropy Specialized Path
+## Tensor Notes
 
-LibCN contains a specialized training path for the common combination:
+`Tensor<T>` is now the base numerical type of the library.
 
-- output layer uses `softmax`
-- loss uses cross entropy
+Currently implemented features include:
 
-This path is enabled by flags already present in the library:
+- scalar / vector / matrix / higher-dimensional construction
+- shape and stride storage
+- coordinate mapping
+- element access through `operator()`
+- transpose by two axes
+- element-wise operations
+- full accumulation
+- axis-wise sum
+- Hadamard product
+- scalar multiplication
+- 2D matrix multiplication through `matrixMultiplication(...)`
+- dimension promotion through `ascend()`
 
-```cpp
-net.ce = true;
-net.layers.back().sm = true;
-```
+For current MLP usage, the most important convention is:
 
-When both conditions are true, `train(...)` and `train_p(...)` will use the specialized path.
-
-In that path, the last layer receives:
-
-```cpp
-output - expected
-```
-
-as `dL/dz`, and the last layer backpropagation is performed through:
-
-```cpp
-backward_dz(...)
-```
-
-rather than the ordinary `backward(...)` path.
-
----
-
-## Loss Functions
-
-Current loss functions are provided in `LibCN::Losses`:
-
-- `MSE`
-- `MAE`
-- `cross_entropy`
-
-Their corresponding derivative functions are also provided.
-
-Loss selection is done through:
-
-```cpp
-net.setLoss(loss_function, loss_derivative_function);
-```
+- **inputs and outputs should be 2D tensors shaped like column vectors**
+- for example, a 2-input sample should usually be shaped as `{2, 1}`
 
 ---
 
@@ -261,7 +246,56 @@ Current activation functions are provided in `LibCN::Activations`:
 - `softmax`
 - `softmax_d`
 
-Note that `softmax_d` in the current implementation is an **approximate version**, not the full Jacobian form. Use it carefully.
+All current activation functions use the form:
+
+```cpp
+Tensor<T> f(const Tensor<T>&)
+```
+
+`softmax_d` is currently an **approximate element-wise form**, not the full Jacobian.
+
+---
+
+## Loss Functions
+
+Current loss functions are provided in `LibCN::Losses`:
+
+- `MSE`
+- `MSE_d`
+- `MAE`
+- `MAE_d`
+- `cross_entropy`
+- `cross_entropy_d`
+
+Loss selection is done through:
+
+```cpp
+net.setLoss(loss_function, loss_derivative_function);
+```
+
+---
+
+## Specialized Softmax + Cross Entropy Path
+
+LibCN contains a specialized training path for the common combination:
+
+- output layer uses `softmax`
+- loss uses `cross_entropy`
+
+This path is controlled by two flags already present in the library:
+
+```cpp
+net.ce = true;
+net.layers.back().sm = true;
+```
+
+When both conditions are true, the last layer uses:
+
+```cpp
+output - expected
+```
+
+as `dL/dz`, and backpropagates through `backward_dz(...)`.
 
 ---
 
@@ -270,7 +304,7 @@ Note that `softmax_d` in the current implementation is an **approximate version*
 ```text
 lib_chest_nn.hpp
 nn/
-    matrix.hpp
+    tensor.hpp
     layer.hpp
     activations.hpp
     losses.hpp
@@ -282,8 +316,8 @@ nn/
 **lib_chest_nn.hpp**  
 Main entry header.
 
-**nn/matrix.hpp**  
-Matrix type and matrix operations.
+**nn/tensor.hpp**  
+General-purpose tensor container and basic tensor operations.
 
 **nn/layer.hpp**  
 Fully connected layer implementation.
@@ -295,20 +329,21 @@ Activation functions and their derivatives.
 Loss functions and their derivatives.
 
 **nn/network.hpp**  
-High-level neural network structure.
+`MLP<T>` definition and training logic.
 
 ---
 
-## Current Status
+## Current Scope
 
-LibCN is currently suitable for:
+LibCN v3.0.0 is currently suitable for:
 
 - learning neural networks
 - educational demonstrations
 - small experiments
-- reference implementations
+- lightweight native C++ usage
+- testing tensor-based neural-network code without external frameworks
 
-It is **not intended for production-scale deep learning workloads**.
+It is **not intended for production-scale training workloads**.
 
 ---
 

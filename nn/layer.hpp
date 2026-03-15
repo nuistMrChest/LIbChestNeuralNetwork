@@ -6,7 +6,7 @@
 #include<random>
 
 namespace LibCN{
-    template<Element T>struct Layer{
+    template<Element T>struct MLPLayer{
         std::function<Tensor<T>(const Tensor<T>&)>activation;
         std::function<Tensor<T>(const Tensor<T>&)>activation_d;
         size_t in_size;
@@ -17,7 +17,7 @@ namespace LibCN{
         Tensor<T>z;
         bool sm;
 
-        Layer(){
+        MLPLayer(){
             in_size=0;
             out_size=0;
             W=Tensor<T>();
@@ -27,7 +27,7 @@ namespace LibCN{
             sm=false;
         }
 
-        Layer(size_t i,size_t o){
+        MLPLayer(size_t i,size_t o){
             in_size=i;
             out_size=o;
             W.resize(2,{o,i});

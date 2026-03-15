@@ -13,11 +13,27 @@ namespace LibCN{
     template<Element T>struct MLP{
         size_t in_size;
         size_t out_size;
-        std::vector<Layer<T>>layers;
+        std::vector<MLPLayer<T>>layers;
         T step;
         std::function<T(const Tensor<T>&,const Tensor<T>&)>loss;
         std::function<Tensor<T>(const Tensor<T>&,const Tensor<T>&)>loss_d;
         bool ce;
+
+        Tensor<T>saveLayerWeights(size_t index){
+            return layers[index].W;
+        }
+
+        Tensor<T>saveLayerBias(size_t index){
+            return layers[index].b;
+        }
+
+        void loadLayerWeights(size_t index,const Tensor<T>&weights){
+            layers[index].W=weights;
+        }
+
+        void loadLayerBias(size_t index,const Tensor<T>&bias){
+            layers[index].b=bias;
+        }
 
         void train(const Tensor<T>&input,const Tensor<T>&expected){
             Tensor<T>last_output=input;
@@ -71,7 +87,7 @@ namespace LibCN{
         }
 
         void setLayer(size_t index,size_t i,size_t o){
-            layers[index]=Layer<T>(i,o);
+            layers[index]=MLPLayer<T>(i,o);
         }
 
         void setLayerFun(size_t index,const std::function<Tensor<T>(const Tensor<T>&)>&a,const std::function<Tensor<T>(const Tensor<T>&)>&a_d){

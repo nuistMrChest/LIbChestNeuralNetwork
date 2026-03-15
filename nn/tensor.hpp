@@ -183,6 +183,18 @@ namespace LibCN{
             return os;
         }
 
+        static Tensor<T>matrix(std::initializer_list<std::initializer_list<T>>a){
+            Tensor<T>res;
+            res.dimension=2;
+            res.shape.resize(2);
+            res.shape[0]=a.size();
+            res.shape[1]=a.begin()->size();
+            res.values.reserve(res.shape[0]*res.shape[1]);
+            for(auto&row:a)res.values.insert(res.values.end(),row.begin(),row.end());
+            res.setStride();
+            return res;
+        }
+
         Tensor(std::initializer_list<T>a){
             dimension=1;
             shape={a.size()};
@@ -258,6 +270,11 @@ namespace LibCN{
             return res;
         }
 
+        Tensor<T>&hadamard_self(const Tensor<T>&a){
+            if(this->dimension==a.dimension&&this->shape==a.shape)for(size_t i=0;i<this->values.size();i++)this->values[i]*=a.values[i];
+            return*this;
+        }
+
         Tensor<T>operator*(const T&a)const{
             Tensor<T>res(this->dimension,this->shape);
             for(size_t i=0;i<res.values.size();i++)res.values[i]=this->values[i]*a;
@@ -286,33 +303,34 @@ namespace LibCN{
             return*this;
         }
 
-        // Tensor<T>transpose(size_t d1,size_t d2)const{
-        //     Tensor<T>res=*this;
-        //     size_t tmp=res.shape[d1];
-        //     res.shape[d1]=res.shape[d2];
-        //     res.shape[d2]=tmp;
-        //     tmp=res.stride[d1];
-        //     res.stride[d1]=res.stride[d2];
-        //     res.stride[d2]=tmp;
-        //     return res;
-        // }
-
-        Tensor<T> transpose(size_t d1,size_t d2) const{
+        Tensor<T>transpose(size_t d1,size_t d2)const{
             if(d1>=dimension||d2>=dimension)return Tensor<T>();
-            if(d1==d2)return *this;
-
-            std::vector<size_t> new_shape=shape;
+            if(d1==d2)return*this;
+            std::vector<size_t>new_shape=shape;
             std::swap(new_shape[d1],new_shape[d2]);
-
-            Tensor<T> res(dimension,new_shape);
-
+            Tensor<T>res(dimension,new_shape);
             for(size_t i=0;i<values.size();++i){
-                std::vector<size_t> idx=unravel_index(i);   // 当前张量中的逻辑坐标
-                std::swap(idx[d1],idx[d2]);                 // 交换两个维度
+                std::vector<size_t>idx=unravel_index(i);
+                std::swap(idx[d1],idx[d2]);
                 res.values[res.ravel_index(idx)]=values[i];
             }
-
             return res;
+        }
+
+        Tensor<T>&transpose_self(size_t d1,size_t d2){
+            if(d1==d2)return*this;
+            std::vector<size_t>new_shape=shape;
+            std::swap(new_shape[d1],new_shape[d2]);
+            Tensor<T>res(dimension,new_shape);
+            for(size_t i=0;i<values.size();++i){
+                std::vector<size_t>idx=unravel_index(i);
+                std::swap(idx[d1],idx[d2]);
+                res.values[res.ravel_index(idx)]=values[i];
+            }
+            this->shape=std::move(res.shape);
+            this->stride=std::move(res.stride);
+            this->values=std::move(res.values);
+            return*this;
         }
 
         Tensor<T>sum(size_t axis)const{
@@ -359,6 +377,13 @@ namespace LibCN{
             Tensor<T>res(dimension+1,s);
             res.values=values;
             return res;
+        }
+
+        Tensor<T>&ascend_self(){
+            dimension++;
+            shape.insert(shape.begin(),1);
+            this->setStride();
+            return*this;
         }
     };
 }
