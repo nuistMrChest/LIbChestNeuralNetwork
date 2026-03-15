@@ -113,16 +113,16 @@ namespace LibCN{
         }
 
         template<typename...Args>T&operator()(Args...args){
-            std::vector<size_t>indexes={static_cast<size_t>(args)...};
+            size_t indexes[]={static_cast<size_t>(args)...};
             size_t index=0;
-            for(size_t i=0;i<indexes.size();++i)index+=indexes[i]*stride[i];
+            for(size_t i=0;i<sizeof...(args);++i)index+=indexes[i]*stride[i];
             return values[index];
         }
 
         template<typename...Args>const T&operator()(Args...args)const{
-            std::vector<size_t>indexes={static_cast<size_t>(args)...};
+            size_t indexes[]={static_cast<size_t>(args)...};
             size_t index=0;
-            for(size_t i=0;i<indexes.size();++i)index+=indexes[i]*stride[i];
+            for(size_t i=0;i<sizeof...(args);++i)index+=indexes[i]*stride[i];
             return values[index];
         }
 
@@ -306,6 +306,17 @@ namespace LibCN{
         Tensor<T>transpose(size_t d1,size_t d2)const{
             if(d1>=dimension||d2>=dimension)return Tensor<T>();
             if(d1==d2)return*this;
+            if(dimension == 2){
+                Tensor<T>res(2,{shape[d2], shape[d1]});
+                size_t rows=shape[0];
+                size_t cols=shape[1];
+                for(size_t i=0;i<rows;++i){
+                    for(size_t j=0;j<cols;++j){
+                        res.values[j*res.stride[0]+i*res.stride[1]]=values[i*stride[0]+j*stride[1]];
+                    }
+                }
+                return res;
+            }
             std::vector<size_t>new_shape=shape;
             std::swap(new_shape[d1],new_shape[d2]);
             Tensor<T>res(dimension,new_shape);
@@ -362,12 +373,21 @@ namespace LibCN{
             const Tensor<T>&a=*this;
             Tensor<T>res;
             if(a.dimension==2&&b.dimension==2&&a.shape[1]==b.shape[0]){
-                res.resize(2,{a.shape[0],b.shape[1]});
-                for(size_t i=0;i<a.shape[0];i++)for(size_t j=0;j<b.shape[1];j++){
-                    res(i,j)=T(0);
-                    for(size_t k=0;k<a.shape[1];k++)res(i,j)+=a(i,k)*b(k,j);
+                size_t m=a.shape[0];
+                size_t n=a.shape[1];
+                size_t p=b.shape[1];
+                res.resize(2, {m, p});
+                for(size_t i=0;i<res.values.size();++i)res.values[i]=T(0);
+                for(size_t i=0;i<m;++i){
+                    for(size_t k=0;k<n;++k){
+                        T aik=a.values[i*a.stride[0]+k*a.stride[1]];
+                        for(size_t j=0;j<p;++j){
+                            res.values[i*res.stride[0]+j*res.stride[1]]+=aik*b.values[k*b.stride[0]+j*b.stride[1]];
+                        }
+                    }
                 }
             }
+
             return res;
         }
 
