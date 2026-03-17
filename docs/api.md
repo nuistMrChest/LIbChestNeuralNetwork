@@ -73,15 +73,13 @@ std::vector<T> values;
 
 ## Basic Member Functions
 
-### getDimention
+### getDimension
 
 ```cpp
-size_t getDimention() const
+size_t getDimension() const
 ```
 
 Returns the tensor dimension count.
-
-> Note: the function name in the current code is spelled `getDimention()`.
 
 ---
 

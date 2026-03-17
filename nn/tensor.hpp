@@ -32,7 +32,7 @@ namespace LibCN{
         std::vector<size_t>stride;
         std::vector<T>values;
 
-        size_t getDimention()const{
+        size_t getDimension()const{
             return dimension;
         }
 

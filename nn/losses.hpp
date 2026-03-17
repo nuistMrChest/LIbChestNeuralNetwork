@@ -37,7 +37,7 @@ namespace LibCN{
         template<Element T>Tensor<T>MAE_d(const Tensor<T>&x,const Tensor<T>&e){
             Tensor<T>res;
             if(x.getShape()==e.getShape()){
-                res.resize(x.getDimention(),x.getShape());
+                res.resize(x.getDimension(),x.getShape());
                 for(size_t i=0;i<x.getShape()[0];i++)for(size_t j=0;j<x.getShape()[1];j++)res(i,j)=x(i,j)>=e(i,j)?T(1):T(-1);
             }
             return res;
@@ -58,7 +58,7 @@ namespace LibCN{
         }
 
         template<Element T>Tensor<T>cross_entropy_d(const Tensor<T>&x,const Tensor<T>&e){
-            Tensor<T>res(x.getDimention(),x.getShape());
+            Tensor<T>res(x.getDimension(),x.getShape());
             if(x.getShape()!=e.getShape())return res;
             constexpr T eps=static_cast<T>(1e-12);
             for(size_t i=0;i<x.getShape()[0];++i)for(size_t j=0;j<x.getShape()[1];++j){
