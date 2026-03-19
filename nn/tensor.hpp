@@ -6,8 +6,14 @@
 #include<numeric>
 #include<utility>
 #include<thread>
+#include<array>
+#include<initializer_list>
+#include<algorithm>
 
 namespace LibCN{
+
+    constexpr size_t MAX_DIM=8;
+
     template<typename T>concept Element=requires(T a,T b,std::iostream&os){
         {a+b}->std::same_as<T>;
         {a+=b}->std::same_as<T&>;
@@ -25,6 +31,8 @@ namespace LibCN{
 
         {a/b}->std::same_as<T>;
     };
+
+    template<Element T>struct TensorView;
 
     template<Element T>struct Tensor{
         size_t dimension;
@@ -171,7 +179,7 @@ namespace LibCN{
                 if(i+1<shape[d])os<<"\n";
             }
             os<<"\n";
-            for(size_t j = 0; j < r; ++j) os << " ";
+            for(size_t j=0;j<r;++j)os<<" ";
             os<<"}";
         }
 
@@ -180,7 +188,7 @@ namespace LibCN{
             else if(a.dimension==0)a.print_0d(os);
             else if(a.dimension==1)a.print_1d(os);
             else if(a.dimension==2)a.print_2d(os);
-            else a.print_nd(os, 0, 0, 0, a.values.size());
+            else a.print_nd(os,0,0,0,a.values.size());
             return os;
         }
 
@@ -271,10 +279,14 @@ namespace LibCN{
             return res;
         }
 
+        Tensor<T>hadamard(const TensorView<T>&a)const;
+
         Tensor<T>&hadamard_self(const Tensor<T>&a){
             if(this->dimension==a.dimension&&this->shape==a.shape)for(size_t i=0;i<this->values.size();i++)this->values[i]*=a.values[i];
             return*this;
         }
+
+        Tensor<T>&hadamard_self(const TensorView<T>&a)const;
 
         Tensor<T>operator*(const T&a)const{
             Tensor<T>res(this->dimension,this->shape);
@@ -291,17 +303,6 @@ namespace LibCN{
 
         friend Tensor<T>operator*(const T&a,const Tensor<T>&b){
             return b*a;
-        }
-
-        Tensor<T>operator*(const Tensor<T>&a)const{
-            if(a.dimension==0)return this->operator*(a.values[0]);
-            else if(this->dimension==0)return a*(this->values[0]);
-            else return Tensor<T>();
-        }
-
-        Tensor<T>&operator*=(const Tensor<T>&a){
-            if(a.dimension==0)this->operator*=(a.values[0]);
-            return*this;
         }
 
         Tensor<T>transpose(size_t d1,size_t d2)const{
@@ -360,15 +361,15 @@ namespace LibCN{
             return res;
         }
 
-        Tensor<T>accumulate()const{
-            Tensor<T>res(0,std::vector<size_t>());
-            res.values[0]=std::accumulate(values.begin(),values.end(),T(0));
-            return res;
+        T accumulate()const{
+            return std::accumulate(values.begin(),values.end(),T(0));
         }
 
-        Tensor<T>dot(const Tensor<T>&a)const{
-            return (this->hadamard(a)).accumulate();
+        T dot(const Tensor<T>&a)const{
+            return(this->hadamard(a).accumulate());
         }
+
+        T dot(const TensorView<T>&a)const;
 
         static void subMatrixMultiplication(size_t f,size_t m,size_t n,size_t p,Tensor<T>&res,const Tensor<T>&a,const Tensor<T>&b){
             for(size_t i=f;i<m;i++)for(size_t k=0;k<n;++k){
@@ -426,6 +427,429 @@ namespace LibCN{
             return*this;
         }
     };
+
+    template<Element T>struct TensorView{
+        Tensor<T>*ori;
+        std::array<size_t,MAX_DIM>from;
+        std::array<size_t,MAX_DIM>to;
+        size_t value_size;
+        std::array<size_t,MAX_DIM>viewed_dimension;
+        std::array<size_t,MAX_DIM>token_dimension;
+        std::array<bool,MAX_DIM>viewed;
+        size_t dimension;
+        
+        TensorView(){
+            ori=nullptr;
+            value_size=0;
+            dimension=0;
+        }
+
+            TensorView(Tensor<T>&a,std::initializer_list<size_t>f,std::initializer_list<size_t>t,std::initializer_list<size_t>s,std::initializer_list<bool>sb){
+            ori=&a;
+            std::copy(f.begin(),f.end(),from.begin());
+            std::copy(t.begin(),t.end(),to.begin());
+            std::copy(s.begin(),s.end(),token_dimension.begin());
+            std::copy(sb.begin(),sb.end(),viewed.begin());
+            size_t ci=0;
+            for(size_t i=0;i<sb.size();i++)if(viewed[i]){
+                viewed_dimension[ci]=i;
+                ci++;
+            }
+            dimension=f.size();
+        }
+
+        template<typename...Args>T&operator()(Args...args){
+            size_t indexes[]={static_cast<size_t>(args)...};
+            size_t index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    index+=((indexes[ci]+from[ci])*(ori->stride[i]));
+                    ci++;
+                }
+                else{
+                    index+=(token_dimension[i]*(ori->stride[i]));
+                }
+            }
+            return ori->values[index];
+        }
+
+        template<typename...Args>const T&operator()(Args...args)const{
+            size_t indexes[]={static_cast<size_t>(args)...};
+            size_t index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    index+=((indexes[ci]+from[ci])*(ori->stride[i]));
+                    ci++;
+                }
+                else{
+                    index+=(token_dimension[i]*(ori->stride[i]));
+                }
+            }
+            return ori->values[index];
+        }
+
+        void print_n(std::ostream&os)const{
+            os<<"{ NULL }";
+        }
+
+        T&scalar_ref(){
+            size_t index=0;
+            for(size_t i=0;i<ori->dimension;i++)if(!viewed[i]) index+=token_dimension[i]*ori->stride[i];
+            return ori->values[index];
+        }
+
+        const T&scalar_ref()const{
+            size_t index=0;
+            for(size_t i=0;i<ori->dimension;i++)if(!viewed[i])index+=token_dimension[i]*ori->stride[i];
+            return ori->values[index];
+        }
+
+        void print_0d(std::ostream&os)const{
+            os<<"{ "<<scalar_ref()<<" }";
+        }
+
+        void print_1d(std::ostream&os)const{
+            os<<"{ ";
+            size_t len=to[0]-from[0];
+            for(size_t i=0;i<len;i++)os<<this->operator()(i)<<" ";
+            os<<"}";
+        }
+
+        void print_2d(std::ostream&os)const{
+            size_t rows=to[0]-from[0];
+            size_t cols=to[1]-from[1];
+            for(size_t i=0;i<rows;i++){
+                if(i==0) os<<"{";
+                else os<<" ";
+                os<<" ";
+                for(size_t j=0;j<cols;j++)os<<this->operator()(i,j)<<" ";
+                if(i==rows-1)os<<"}";
+                else os<<"\n";
+            }
+        }
+
+        template<size_t N>T&at_index_array(const std::array<size_t,N>&idx){
+            size_t index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    index+=(idx[ci]+from[ci])*ori->stride[i];
+                    ci++;
+                }
+                else index+=token_dimension[i]*ori->stride[i];
+            }
+            return ori->values[index];
+        }
+
+        template<size_t N>const T&at_index_array(const std::array<size_t,N>&idx)const{
+            size_t index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    index+=(idx[ci]+from[ci])*ori->stride[i];
+                    ci++;
+                }
+                else index+=token_dimension[i]*ori->stride[i];
+            }
+            return ori->values[index];
+        }
+
+        void print_nd(std::ostream&os,size_t d,size_t r,std::array<size_t,MAX_DIM>&idx)const{
+            if(d==dimension-1){
+                os<<"{ ";
+                size_t len=to[d]-from[d];
+                for(size_t i=0;i<len;i++){
+                    idx[d]=i;
+                    os<<at_index_array(idx);
+                    if(i+1<len) os<<" ";
+                }
+                os<<" }";
+                return;
+            }
+
+            os<<"{\n";
+            size_t len=to[d]-from[d];
+            for(size_t i=0;i<len;i++){
+                idx[d]=i;
+                for(size_t j=0;j<r+2;j++)os<<" ";
+                print_nd(os,d+1,r+2,idx);
+                if(i+1<len)os<<"\n";
+            }
+            os<<"\n";
+            for(size_t j=0;j<r;j++)os<<" ";
+            os<<"}";
+        }
+
+        friend std::ostream&operator<<(std::ostream&os,const TensorView<T>&a){
+            if(a.ori==nullptr)a.print_n(os);
+            else if(a.dimension==0)a.print_0d(os);
+            else if(a.dimension==1)a.print_1d(os);
+            else if(a.dimension==2)a.print_2d(os);
+            else{
+                std::array<size_t,MAX_DIM>idx{};
+                a.print_nd(os,0,0,idx);
+            }
+            return os;
+        }
+
+        std::vector<size_t>getShape()const{
+            std::vector<size_t>res;
+            for(size_t i=0;i<from.size();i++)res.push_back(to[i]-from[i]);
+            return res;
+        }
+
+        template<typename...Args>size_t getValuesIndex(Args...args)const{
+            constexpr size_t N=sizeof...(Args);
+            std::array<size_t,N>idx{static_cast<size_t>(args)...};
+            size_t index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    index+=(idx[ci]+from[ci])*ori->stride[i];
+                    ci++;
+                }
+                else index+=token_dimension[i]*ori->stride[i];
+            }
+            return index;
+        }
+
+        size_t fakeValueSize()const{
+            if(ori==nullptr)return 0;
+            if(dimension==0)return 1;
+            size_t ans=1;
+            for(size_t i=0;i<dimension;i++)ans*=to[i]-from[i];
+            return ans;
+        }
+
+        size_t getValuesIndexFromFake(size_t fake_index)const{
+            size_t total=fakeValueSize();
+            if(dimension==0){
+                size_t real_index=0;
+                for(size_t i=0;i<ori->dimension;i++)if(!viewed[i]) real_index+=token_dimension[i]*ori->stride[i];
+                return real_index;
+            }
+            std::array<size_t,MAX_DIM>idx{};
+            size_t rem=fake_index;
+            for(size_t d=dimension;d>0;d--){
+                size_t k=d-1;
+                size_t len=to[k]-from[k];
+                idx[k]=rem%len;
+                rem/=len;
+            }
+            size_t real_index=0;
+            size_t ci=0;
+            for(size_t i=0;i<ori->dimension;i++){
+                if(viewed[i]){
+                    real_index+=(idx[ci]+from[ci])*ori->stride[i];
+                    ci++;
+                }
+                else real_index+=token_dimension[i]*ori->stride[i];
+            }
+            return real_index;
+        }
+
+        Tensor<T>operator+(const TensorView<T>&a)const{
+            Tensor<T>res;
+            if(this->getShape()==a.getShape()){
+                res.resize(a.dimension,a.getShape());
+                for(size_t i=0;i<res.values.size();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)]+a.ori->values[a.getValuesIndexFromFake(i)];
+            }
+            return res;
+        }
+
+        TensorView<T>&operator+=(const TensorView<T>&a){
+            if(this->getShape()==a.getShape())for(size_t i=0;i<this->fakeValueSize();i++)this->ori->values[getValuesIndexFromFake(i)]+=a.ori->values[getValuesIndexFromFake(i)];
+            return*this;
+        }
+
+        Tensor<T>operator+(const Tensor<T>&a)const{
+            Tensor<T>res;
+            if(getShape()==a.getShape()){
+                res.resize(a.dimension,a.shape());
+                for(size_t i=0;i<res.values.size();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)]+a.values[i];
+            }
+            return res;
+        }
+
+        TensorView<T>&operator+=(const Tensor<T>&a){
+            if(getShape()==a.getShape())for(size_t i=0;i<this->fakeValueSize();i++)this->ori->values[getValuesIndexFromFake(i)]+=a.values[i];
+            return*this;
+        }
+
+        friend Tensor<T>operator+(const Tensor<T>&a,const TensorView<T>&b){
+            return b+a;
+        }
+
+        friend Tensor<T>&operator+=(Tensor<T>&a,const TensorView<T>&b){
+            if(a.getShape()==b.getShape())for(size_t i=0;i<a.values.size();i++)a.values[i]+=b.ori->values[b.getValuesIndexFromFake(i)];
+            return a;
+        }
+
+        Tensor<T>operator-(const TensorView<T>&a)const{
+            Tensor<T>res;
+            if(this->getShape()==a.getShape()){
+                res.resize(a.dimension,a.getShape());
+                for(size_t i=0;i<res.values.size();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)]-a.ori->values[a.getValuesIndexFromFake(i)];
+            }
+            return res;
+        }
+
+        TensorView<T>&operator-=(const TensorView<T>&a){
+            if(this->getShape()==a.getShape())for(size_t i=0;i<this->fakeValueSize();i++)this->ori->values[getValuesIndexFromFake(i)]-=a.ori->values[getValuesIndexFromFake(i)];
+            return*this;
+        }
+
+        Tensor<T>operator-(const Tensor<T>&a)const{
+            Tensor<T>res;
+            if(getShape()==a.getShape()){
+                res.resize(a.dimension,a.shape());
+                for(size_t i=0;i<res.values.size();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)]-a.values[i];
+            }
+            return res;
+        }
+
+        TensorView<T>&operator-=(const Tensor<T>&a){
+            if(getShape()==a.getShape())for(size_t i=0;i<this->fakeValueSize();i++)this->ori->values[getValuesIndexFromFake(i)]-=a.values[i];
+            return*this;
+        }
+
+        friend Tensor<T>operator-(const Tensor<T>&a,const TensorView<T>&b){
+            Tensor<T>res;
+            if(a.getShape()==b.getShape()){
+                res.resize(a.dimension,a.getShape());
+                for(size_t i=0;i<a.values.size();i++)res.values[i]=a.values[i]-b.ori->values[b.getValuesIndexFromFake(i)];
+            }
+            return res;
+        }
+
+        friend Tensor<T>&operator-=(Tensor<T>&a,const TensorView<T>&b){
+            if(a.getShape()==b.getShape())for(size_t i=0;i<a.values.size();i++)a.values[i]-=b.ori->values[b.getValuesIndexFromFake(i)];
+            return a;
+        }
+
+        Tensor<T>hadamard(const TensorView<T>&a)const{
+            Tensor<T>res;
+            if(this->getShape()==a.getShape()){
+                res.resize(this->dimension,this->getShape());
+                for(size_t i=0;i<this->fakeValueSize();i++)res.values[i]=this->ori->values[this->getValuesIndexFromFake(i)]*a.ori->values[getValuesIndexFromFake(i)];
+            }
+            return res;
+        }
+
+        Tensor<T>hadamard(const Tensor<T>&a)const{
+            Tensor<T>res;
+            if(this->getShape()==a.getShape()){
+                res.resize(this->dimension,this->getShape());
+                for(size_t i=0;i<a.values.size();i++)res.values[i]=this->ori->values[getValuesIndexFromFake(i)]*a.values[i];
+            }
+            return res;
+        }
+
+        TensorView<T>&hadamard_self(const TensorView<T>&a){
+            if(this->getShape()==a.getShape())for(size_t i=0;i<this->ori->values.size();i++)this->ori->values[this->getValuesIndexFromFake(i)]*=a,ori->values[a.getValuesIndexFromFake(i)];
+            return*this;
+        }
+
+        TensorView<T>&hadamard_self(const Tensor<T>&a){
+            if(this->getShape()==a.getShape())for(size_t i=0;i<this->ori->values.size();i++)this->ori->values[this->getValuesIndexFromFake(i)]*=a.values[i];
+            return*this;
+        }
+
+        Tensor<T>operator*(const T&a)const{
+            Tensor<T>res(dimension,getShape());
+            for(size_t i=0;i<res.values.size();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)]*a;
+            return res;
+        }
+
+        TensorView<T>&operator*=(const T&a){
+            for(size_t i=0;i<fakeValueSize();i++)this->ori->values[getValuesIndexFromFake(i)]*=a;
+            return*this;
+        }
+
+        friend Tensor<T>operator*(const T&a,const TensorView&b){
+            return b*a;
+        }
+
+        Tensor<T>materialize()const{
+            Tensor<T>res(dimension,getShape());
+            for(size_t i=0;i<fakeValueSize();i++)res.values[i]=ori->values[getValuesIndexFromFake(i)];
+            return res;
+        }
+
+        Tensor<T>transpose(size_t d1,size_t d2)const{
+            return materialize().transpose_self(d1,d2);
+        }
+
+        std::vector<size_t>unravel_index(size_t index)const{
+            std::vector<size_t>idx(dimension);
+            for(size_t i=0;i<dimension;++i){
+                idx[i]=index/ori->stride[viewed_dimension[i]];
+                index%=ori->stride[viewed_dimension[i]];
+            }
+            return idx;
+        }
+
+        size_t ravel_index(const std::vector<size_t>&idx)const{
+            size_t index=0;
+            for(size_t i=0;i<idx.size();++i)index+=idx[i]*ori->stride[viewed_dimension[i]];
+            return index;
+        }
+
+        Tensor<T>sum(size_t axis)const{
+            std::vector<size_t>s=getShape();
+            s.erase(s.begin()+axis);
+            Tensor<T>res(dimension-1,s);
+            for(size_t i=0;i<res.values.size();i++)res.values[i]=T(0);
+            for(size_t i=0;i<this->fakeValueSize();i++){
+                std::vector<size_t>idx=unravel_index(i);
+                idx.erase(idx.begin()+axis);
+                size_t ri=0;
+                for(size_t j=0;j<idx.size();j++)ri+=idx[j]*res.stride[j];
+                res.values[ri]+=ori->values[getValuesIndexFromFake(i)];
+            }
+            return res;
+        }
+
+        T accumulate()const{
+            T res(0);
+            for(size_t i=0;i<fakeValueSize();i++)res+=ori->values[getValuesIndexFromFake(i)];
+            return res;
+        }
+
+        T dot(const TensorView<T>&a)const{
+            T res(0);
+            if(this->getShape()==a.getShape())for(size_t i=0;i<this->fakeValueSize();i++)res+=this->ori->values[this->getValuesIndexFromFake(i)]*a.ori->values[a.getValuesIndexFromFake(i)];
+            return res;
+        }
+
+        T dot(const Tensor<T>&a)const{
+            T res(0);
+            if(this->getShape()==a.getShape())for(size_t i=0;i<a.values.size();i++)res+=this->ori->values[this->getValuesIndexFromFake(i)]*a.values[i];
+            return res;
+        }
+    };
+
+    template<Element T>Tensor<T>Tensor<T>::hadamard(const TensorView<T>&a)const{
+        Tensor<T>res;
+        if(this->getShape()==a.getShape()){
+            res.resize(this->dimension,this->getShape());
+            for(size_t i=0;i<this->values.size();i++)res.values[i]=this->values[i]*a.ori->values[a.getValuesIndexFromFake(i)];
+        }
+        return res;
+    }
+
+    template<Element T>Tensor<T>&Tensor<T>::hadamard_self(const TensorView<T>&a)const{
+        if(this->getShape()==a.getShape())for(size_t i=0;i<this-<values.size();i++)this->values[i]*=a.ori->values[a.getValuesIndexFromFake(i)];
+        return*this;
+    }
+
+    template<Element T>T Tensor<T>::dot(const TensorView<T>&a)const{
+        T res(0);
+        if(this->getShape()==a.getShape)for(size_t i=0;i<this->values.size();i++)res+=this->values[i]*a.ori->values[a.getValuesIndexFromFake(i)];
+        return res;
+    }
 }
 
 #endif
